@@ -13,14 +13,13 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { token, title, description } = req.query;
+  const { token, title, description, privacyStatus } = req.query;
 
   if (!token || !title) {
     return res.status(400).json({ error: 'Missing token or title' });
   }
 
   try {
-    // Parse multipart form data (for video file)
     const form = formidable({ multiples: false });
     const [fields, files] = await form.parse(req);
 
@@ -29,7 +28,6 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'No video file provided' });
     }
 
-    // Create OAuth2 client with user's token
     const oauth2Client = new google.auth.OAuth2(
       process.env.GOOGLE_CLIENT_ID,
       process.env.GOOGLE_CLIENT_SECRET,
@@ -38,15 +36,13 @@ export default async function handler(req, res) {
 
     oauth2Client.setCredentials({ access_token: token });
 
-    // Initialize YouTube API
     const youtube = google.youtube({
       version: 'v3',
       auth: oauth2Client,
     });
 
-    // Upload video
     const fileStream = fs.createReadStream(videoFile.filepath);
-    
+
     const response = await youtube.videos.insert(
       {
         part: 'snippet,status',
@@ -56,7 +52,7 @@ export default async function handler(req, res) {
             description: description || '',
           },
           status: {
-            privacyStatus: 'private', // Change to 'public' or 'unlisted' as needed
+            privacyStatus: privacyStatus || 'private',
           },
         },
         media: {
@@ -65,8 +61,11 @@ export default async function handler(req, res) {
       }
     );
 
-    // Clean up temp file
-    fs.unlinkSync(videoFile.filepath);
+    try {
+      fs.unlinkSync(videoFile.filepath);
+    } catch (cleanupError) {
+      console.warn('Temp file cleanup failed:', cleanupError.message);
+    }
 
     res.status(200).json({
       success: true,
@@ -75,9 +74,9 @@ export default async function handler(req, res) {
     });
   } catch (error) {
     console.error('Upload error:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Failed to upload video',
-      details: error.message 
+      details: error.message,
     });
   }
 }
