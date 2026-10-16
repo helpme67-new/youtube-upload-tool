@@ -5,7 +5,6 @@ export default function Upload() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [token, setToken] = useState('');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [privacyStatus, setPrivacyStatus] = useState('private');
@@ -13,12 +12,18 @@ export default function Upload() {
   const fileInputRef = useRef(null);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const t = params.get('token');
-    if (t) {
-      setToken(t);
-      setStep(2);
+    // Check login status from server (cookie-based)
+    async function check() {
+      try {
+        const res = await fetch('/api/youtube/status');
+        const data = await res.json();
+        if (data.loggedIn) setStep(2);
+        else setStep(1);
+      } catch (err) {
+        setStep(1);
+      }
     }
+    check();
   }, []);
 
   const handleFileChange = (e) => {
@@ -29,7 +34,7 @@ export default function Upload() {
   };
 
   const handleUpload = async () => {
-    if (!selectedFile || !title || !token) return;
+    if (!selectedFile || !title) return;
 
     setLoading(true);
     setError('');
@@ -38,15 +43,11 @@ export default function Upload() {
     try {
       const formData = new FormData();
       formData.append('video', selectedFile);
+      formData.append('title', title);
+      formData.append('description', description);
+      formData.append('privacyStatus', privacyStatus);
 
-      const queryParams = new URLSearchParams({
-        token,
-        title,
-        description,
-        privacyStatus,
-      });
-
-      const res = await fetch(`/api/youtube/upload?${queryParams}`, {
+      const res = await fetch('/api/youtube/upload', {
         method: 'POST',
         body: formData,
       });
@@ -67,6 +68,11 @@ export default function Upload() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleLogout = async () => {
+    await fetch('/api/youtube/logout', { method: 'POST' });
+    setStep(1);
   };
 
   const inputStyle = {
@@ -102,18 +108,23 @@ export default function Upload() {
         )}
 
         {step === 1 && (
-          <button
-            onClick={() => { window.location.href = '/api/youtube/auth'; }}
-            style={{ width: '100%', background: 'linear-gradient(135deg, #4285f4, #1f2937)', color: '#fff', border: 'none', padding: '14px 0', borderRadius: '8px', fontSize: '15px', fontWeight: '700', cursor: 'pointer' }}
-          >
-            🔐 Login with Google
-          </button>
+          <div>
+            <button
+              onClick={() => { window.location.href = '/api/youtube/auth'; }}
+              style={{ width: '100%', background: 'linear-gradient(135deg, #4285f4, #1f2937)', color: '#fff', border: 'none', padding: '14px 0', borderRadius: '8px', fontSize: '15px', fontWeight: 700 }}
+            >
+              🔐 Login with Google
+            </button>
+
+            <p style={{ fontSize: '13px', color: '#94a3b8', marginTop: '12px' }}>You will be asked to grant YouTube upload permissions.</p>
+          </div>
         )}
 
         {step === 2 && (
           <div>
-            <div style={{ background: '#0a2010', color: '#86efac', padding: '12px 16px', borderRadius: '8px', marginBottom: '20px', fontSize: '13px' }}>
-              ✅ Logged in! Ready to upload.
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+              <div style={{ background: '#0a2010', color: '#86efac', padding: '8px 12px', borderRadius: '8px', fontSize: '13px' }}>✅ Logged in! Ready to upload.</div>
+              <button onClick={handleLogout} style={{ background: 'transparent', color: '#f87171', border: 'none', cursor: 'pointer' }}>Logout</button>
             </div>
 
             <input
